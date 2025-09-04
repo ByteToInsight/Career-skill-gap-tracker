@@ -1,89 +1,112 @@
-import streamlit as st
+import random
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 
-st.set_page_config(page_title="Career Skill Gap Tracker", layout="wide")
+# -----------------------
+# 1. Generate Job Data
+# -----------------------
+job_roles = [
+    "Data Analyst", "Machine Learning Engineer", "Data Scientist", 
+    "Business Analyst", "AI Researcher", "Cloud Engineer",
+    "Full Stack Developer", "Product Manager", "DevOps Engineer",
+    "Data Engineer", "Cybersecurity Analyst", "Quantitative Analyst"
+]
 
-# Example job dataset (can be replaced with your data generator)
-job_title = "Data Analyst"
-skills = ["Python", "SQL", "Excel", "Data Visualization", "Statistics"]
-required_levels = [8, 7, 6, 7, 6]
+skills_pool = ["Python", "SQL", "Excel", "Tableau", "PowerBI", "Machine Learning",
+               "Deep Learning", "Communication", "Project Management", "Leadership",
+               "Data Cleaning", "Statistics", "Cloud Computing", "APIs", "Docker"]
 
-# Initialize session_state for persistent input
-if "user_levels" not in st.session_state:
-    st.session_state.user_levels = {skill: 0 for skill in skills}
+# Generate 1000 job postings
+jobs = []
+for i in range(1000):
+    job = random.choice(job_roles) + f" #{i+1}"
+    num_skills = random.randint(5, 10)
+    job_skills = random.sample(skills_pool, num_skills)
+    required_levels = [random.randint(5, 10) for _ in range(num_skills)]
+    for skill, level in zip(job_skills, required_levels):
+        jobs.append({"Job": job, "Skill": skill, "Required_Level": level})
 
-st.title("🚀 Career Skill Gap Tracker")
-st.subheader(f"Job: {job_title}")
+df_jobs = pd.DataFrame(jobs)
 
-# Sidebar input
-st.sidebar.markdown("### Enter Your Current Skill Levels:")
-user_levels = []
-for skill, req_level in zip(skills, required_levels):
-    level = st.sidebar.select_slider(
-        f"{skill} (required: {req_level})",
-        options=list(range(0, 11)),
-        format_func=lambda x: "⭐"*x if x > 0 else "0️⃣",
-        key=skill
-    )
-    st.session_state.user_levels[skill] = level
-    user_levels.append(level)
+# -----------------------
+# 2. User Skill Input
+# -----------------------
+user_skills = {}
+all_skills = df_jobs['Skill'].unique()
+print("Enter your skill levels (1-10) for the following skills:")
+for skill in all_skills:
+    while True:
+        try:
+            level = int(input(f"{skill}: "))
+            if 1 <= level <= 10:
+                user_skills[skill] = level
+                break
+            else:
+                print("Enter a number between 1 and 10")
+        except:
+            print("Invalid input. Enter a number between 1 and 10")
 
-# Compute gap
-gap = [req - usr for req, usr in zip(required_levels, user_levels)]
+# -----------------------
+# 3. Choose Job
+# -----------------------
+print("\nChoose a job from the list below:")
+unique_jobs = df_jobs['Job'].unique()
+for idx, job in enumerate(unique_jobs[:50]):  # show first 50 jobs
+    print(f"{idx+1}. {job}")
 
-# ------------------- Layout -------------------
-col1, col2 = st.columns(2)
+while True:
+    try:
+        choice = int(input("Enter the number of the job you want to see: "))
+        if 1 <= choice <= len(unique_jobs[:50]):
+            job_to_plot = unique_jobs[choice-1]
+            break
+        else:
+            print("Invalid choice.")
+    except:
+        print("Enter a valid number.")
 
-with col1:
-    st.markdown("### 📊 Skill Comparison Radar Chart")
-    fig_radar = go.Figure()
-    fig_radar.add_trace(go.Scatterpolar(
-        r=required_levels,
-        theta=skills,
-        fill='toself',
-        name='Required'
-    ))
-    fig_radar.add_trace(go.Scatterpolar(
-        r=user_levels,
-        theta=skills,
-        fill='toself',
-        name='You'
-    ))
-    fig_radar.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0,10])),
-        showlegend=True
-    )
-    st.plotly_chart(fig_radar, use_container_width=True)
+# -----------------------
+# 4. Calculate Gap
+# -----------------------
+df_plot = df_jobs[df_jobs['Job'] == job_to_plot].copy()
+df_plot['User_Level'] = df_plot['Skill'].map(user_skills)
+df_plot['Gap'] = df_plot['Required_Level'] - df_plot['User_Level']
+df_plot['Gap_Positive'] = df_plot['Gap'].apply(lambda x: x if x>0 else 0)
 
-with col2:
-    st.markdown("### 📊 Skill Gap Bar Chart")
-    fig_bar = go.Figure()
-    fig_bar.add_trace(go.Bar(
-        x=skills,
-        y=gap,
-        marker_color='indianred',
-        name="Gap"
-    ))
-    fig_bar.add_trace(go.Bar(
-        x=skills,
-        y=user_levels,
-        marker_color='lightgreen',
-        name="Your Level"
-    ))
-    fig_bar.update_layout(barmode='group', yaxis=dict(title="Skill Level"))
-    st.plotly_chart(fig_bar, use_container_width=True)
+# -----------------------
+# 5. Visualization
+# -----------------------
 
-# Overall completion
-completion = sum(user_levels)/sum(required_levels)*100
-st.markdown("### 🎯 Overall Skill Completion")
-fig_donut = go.Figure(go.Pie(
-    values=[sum(user_levels), sum(required_levels)-sum(user_levels)],
-    labels=["You", "Gap"],
-    hole=0.6,
-    marker_colors=['lightgreen', 'lightcoral']
+# Radar Chart
+fig_radar = go.Figure()
+fig_radar.add_trace(go.Scatterpolar(
+      r=df_plot['User_Level'],
+      theta=df_plot['Skill'],
+      fill='toself',
+      name='Your Skill'
 ))
-fig_donut.update_layout(showlegend=True)
-st.plotly_chart(fig_donut, use_container_width=True)
+fig_radar.add_trace(go.Scatterpolar(
+      r=df_plot['Required_Level'],
+      theta=df_plot['Skill'],
+      fill='toself',
+      name='Required Skill'
+))
+fig_radar.update_layout(
+  polar=dict(radialaxis=dict(visible=True, range=[0,10])),
+  title=f"Skill Gap Radar for {job_to_plot}"
+)
+fig_radar.show()
 
-st.markdown(f"**Overall Skill Completion:** {completion:.2f}%")
+# Horizontal Bar Chart
+fig_bar = px.bar(df_plot, x='Gap_Positive', y='Skill', orientation='h',
+                 title=f"Skill Gap for {job_to_plot}",
+                 color='Gap_Positive', color_continuous_scale='reds')
+fig_bar.show()
+
+# Bubble Chart
+fig_bubble = px.scatter(df_plot, x='Skill', y='Required_Level',
+                        size='Gap_Positive', color='Gap_Positive',
+                        title=f"Skill Gap Bubble Chart for {job_to_plot}",
+                        size_max=50, color_continuous_scale='oranges')
+fig_bubble.show()
